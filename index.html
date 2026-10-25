@@ -196,6 +196,7 @@ textarea
     <button class="secondary" id="saveDay">この日の内容を保存</button>
     <button class="secondary" id="exportData">バックアップ保存</button>
     <button class="secondary" id="importBtn">復元</button>
+    
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <span class="status" id="status">端末内に自動保存</span>
   </div>
@@ -221,6 +222,11 @@ textarea
     <div class="note">この端末で使う名前を1人分だけ設定できます。変更しても過去の勤務記録は削除されません。</div>
     <div id="nameRoster" class="name-roster"></div>
   </section>
+
+  <div class="reset-area" style="margin:24px 0 18px;padding:14px 0;border-top:1px solid #d5dfe7;text-align:center">
+    <button class="danger" id="resetAllData" style="width:100%;max-width:420px">全データリセット</button>
+    <div class="note" style="margin-top:6px">勤務記録など、この端末に保存されたデータをすべて削除します。</div>
+  </div>
 </main>
 <script>
 (function(){
@@ -720,6 +726,22 @@ $('exportData').addEventListener('click',()=>{
  const blob=new Blob([JSON.stringify({app:'勤務結果記録',version:2,records:exportRecords,names:allNames,dispatchPlaces:savedDispatchPlaces,holidayDates:holidayDates,autoHolidayDates:autoHolidayDates},null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`勤務結果バックアップ_${localDate()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
 });
+
+$('resetAllData').addEventListener('click',()=>{
+  const message='【全データリセット】\n\nこの端末に保存された勤務記録、名前、代休・祝代休の登録日、派遣場所などをすべて削除します。\nこの操作は取り消せません。先に「バックアップ保存」を行うことをおすすめします。\n\n本当にリセットしますか？';
+  if(!confirm(message))return;
+  if(!confirm('最終確認：保存データをすべて削除します。実行してよろしいですか？'))return;
+  [
+    'workResultRecords_v1',
+    'workResultNames_v1',
+    'workResultDispatchPlaces_v1',
+    'workResultHolidayDates_v1',
+    'workResultAutoHolidayDates_v1'
+  ].forEach(key=>localStorage.removeItem(key));
+  alert('この端末の勤務管理データをリセットしました。');
+  location.reload();
+});
+
 $('importBtn').addEventListener('click',()=>$('importFile').click());
 $('importFile').addEventListener('change',async e=>{
  const f=e.target.files[0];if(!f)return;
