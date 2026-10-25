@@ -178,6 +178,17 @@ textarea
 @media(max-width:430px){.person-calendar{padding:6px;margin:7px 0}.calendar-day{min-height:48px;padding:2px 1px}.calendar-mark{font-size:10px}.calendar-mark.comp-click{font-size:9px;padding:2px}.calendar-toolbar strong{font-size:12px}.calendar-toolbar button{padding:5px 7px;font-size:10px}}
 </style>
 
+<style>
+.work-view-overlay{position:fixed;inset:0;z-index:2000;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px}
+.work-view-panel{background:#fff;color:#17212b;border-radius:14px;width:min(100%,560px);max-height:90dvh;overflow:auto;padding:16px;box-shadow:0 10px 35px #0005}
+.work-view-head{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #d7e0e8;padding-bottom:10px;margin-bottom:10px}
+.work-view-head strong{font-size:17px}.work-view-head button{font-size:13px}
+.work-view-person{border:1px solid #d7e0e8;border-radius:10px;padding:12px;margin:9px 0;background:#f8fafc}
+.work-view-person h3{margin:0 0 9px;font-size:16px;color:#17324d}
+.work-view-row{display:grid;grid-template-columns:100px 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #e5eaf0;font-size:13px;overflow-wrap:anywhere}
+.work-view-row span:first-child{color:#526679;font-weight:700}
+.calendar-day.work-view-available{cursor:pointer}.calendar-day.work-view-available:active{background:#dbeafe}
+</style>
 </head>
 <body>
 <header>
@@ -805,6 +816,52 @@ $('importFile').addEventListener('change',async e=>{
  }catch(err){alert('取り込めませんでした。バックアップ形式と勤務記録を確認してください。')}finally{e.target.value=''}
 });
 
+function showCalendarWorkDetail(name, ds){
+ const rec=records[ds];
+ const source=(ds===currentDate&&dirty)?people:(Array.isArray(rec?.people)?rec.people:[]);
+ const matches=source.filter(p=>p&&p.name===name);
+ const overlay=document.createElement('div');overlay.className='work-view-overlay';
+ const panel=document.createElement('div');panel.className='work-view-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
+ const head=document.createElement('div');head.className='work-view-head';
+ const heading=document.createElement('strong');heading.textContent=ds+' の勤務記録';
+ const close=document.createElement('button');close.type='button';close.className='secondary';close.textContent='閉じる';
+ const dismiss=()=>overlay.remove();close.addEventListener('click',dismiss);
+ overlay.addEventListener('click',e=>{if(e.target===overlay)dismiss()});
+ head.append(heading,close);panel.append(head);
+ const addRow=(parent,label,value)=>{const row=document.createElement('div');row.className='work-view-row';const a=document.createElement('span');a.textContent=label;const b=document.createElement('span');b.textContent=String(value??'');row.append(a,b);parent.append(row)};
+ if(!matches.length){const empty=document.createElement('p');empty.textContent='この日の勤務記録はありません。';panel.append(empty)}
+ matches.forEach(p=>{
+  const card=document.createElement('section');card.className='work-view-person';
+  const title=document.createElement('h3');title.textContent=p.name||'氏名未設定';card.append(title);
+  addRow(card,'勤務種別',p.type||'未設定');
+  addRow(card,'勤務時間',p.workStart&&p.workEnd?p.workStart+' ～ '+p.workEnd:'入力なし');
+  const breaks=Array.isArray(p.breaks)?p.breaks:[];
+  addRow(card,'休憩時間',breaks.length?breaks.map(b=>(b.start||'--:--')+' ～ '+(b.end||'--:--')).join('、'):(p.type==='日勤'?'12:00 ～ 13:00（標準）':'入力なし'));
+  {
+   const isHolidayWork=['祝休','祝代休'].includes(p.type);
+   const mins=isHolidayWork?holidayWorkMinutes(p):overtimeMinutes(p);
+   const label=isHolidayWork?'祝日勤務時間':'超過勤務時間';
+   const value=mins===null?'--:--':`${Math.floor(mins/60)}時間${String(mins%60).padStart(2,'0')}分`;
+   addRow(card,label,value);
+   const row=card.lastElementChild;
+   row.style.color='#c62828';
+   row.style.fontWeight='800';
+   row.style.background='#fff4f4';
+   row.style.borderRadius='6px';
+   row.style.padding='8px';
+  }
+  if(p.type==='代休'||p.type==='祝代休'){
+   addRow(card,p.type+'発生日',p.compensatoryDate||'未設定');
+  }
+  addRow(card,'派遣',p.dispatch?'有（'+(p.dispatchPlace||'場所未入力')+'）':'無');
+  addRow(card,'出張',p.trip?'有（'+(p.tripStart||'--:--')+' ～ '+(p.tripEnd||'--:--')+'）':'無');
+  addRow(card,'宿直',p.overnight?'有':'無');
+  addRow(card,'出勤時打刻',p.clockIn===null||p.clockIn===undefined?'未設定':p.clockIn?'有':'無');
+  addRow(card,'退勤時打刻',p.clockOut===null||p.clockOut===undefined?'未設定':p.clockOut?'有':'無');
+  addRow(card,'備考',p.remarks||'なし');panel.append(card);
+ });
+ overlay.append(panel);document.body.append(overlay);
+}
 function renderPersonCalendar(name, container){
  const section=document.createElement('section');section.className='person-calendar';
  const title=document.createElement('h3');title.textContent='月間勤務カレンダー';section.append(title);
@@ -816,7 +873,7 @@ function renderPersonCalendar(name, container){
  toolbar.append(prev,monthLabel,next);section.append(toolbar);
  const grid=document.createElement('div');grid.className='calendar-grid';section.append(grid);
  const legend=document.createElement('div');legend.className='calendar-legend';
- legend.textContent='∞ 日勤　〇 週休　●※ 代休　◎ 祝休　祝代※ 祝代休　夏特1〜5・夏休1〜7・冬休1〜3・年休';
+ legend.textContent='日付をタップすると勤務詳細を表示（代休・祝代休の発生日も確認できます）。　∞ 日勤　〇 週休　●※ 代休　◎ 祝休　祝代※ 祝代休　夏特1〜5・夏休1〜7・冬休1〜3・年休';
  section.append(legend);
  const dayNames=['日','月','火','水','木','金','土'];
  function dateKey(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
@@ -838,6 +895,7 @@ function renderPersonCalendar(name, container){
      if(ds===localDate())cell.classList.add('today');
      const num=document.createElement('span');num.className='day-num';num.textContent=d;cell.append(num);
      const entries=recordsForDate(ds);
+     if(entries.length){cell.classList.add('work-view-available');cell.title='タップして勤務記録を見る';cell.addEventListener('click',()=>showCalendarWorkDetail(name,ds));}
      entries.forEach(person=>{
        let label='';
        if(person.type==='日勤')label='∞';
@@ -852,14 +910,8 @@ function renderPersonCalendar(name, container){
        if(!label)return;
        if(person.type==='代休'||person.type==='祝代休'){
          const mark=document.createElement('button');mark.type='button';mark.className='calendar-mark comp-click';mark.textContent=label;
-         mark.title='クリックすると発生日を確認できます';
-         mark.addEventListener('click',()=>{
-           const key=person.type==='祝代休'?'holiday':'compensatory';
-           const registered=datesFor(name,key);
-           const used=person.compensatoryDate||'';
-           const sourceDate=used||'未設定';
-           alert(`${name}さん\n勤務日：${ds}\n勤務種別：${person.type}\n発生日：${sourceDate}\n\n登録済み発生日：${registered.length?registered.join('、'):'なし'}`);
-         });
+         mark.title='タップして勤務記録と発生日を確認';
+         mark.addEventListener('click',e=>{e.stopPropagation();showCalendarWorkDetail(name,ds)});
          cell.append(mark);
        }else{
          const mark=document.createElement('span');mark.className='calendar-mark';mark.textContent=label;cell.append(mark);
