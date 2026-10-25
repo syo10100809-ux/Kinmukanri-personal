@@ -189,6 +189,85 @@ textarea
 .work-view-row span:first-child{color:#526679;font-weight:700}
 .calendar-day.work-view-available{cursor:pointer}.calendar-day.work-view-available:active{background:#dbeafe}
 </style>
+
+<style id="mobile-touch-size-tune">
+/* 入力画面の押しやすさを少し改善。既存レイアウト・機能・保存キーは変更しない */
+@media (max-width: 430px) {
+  button { padding: 7px 8px; font-size: 11px; }
+  input[type=date], select, input[type=text], input[type=time] { min-height: 31px; padding: 4px 5px; font-size: 11px; border-radius: 5px; }
+  #recordDate { min-height: 30px; font-size: 12px; padding: 3px; }
+  #loadDate { padding: 6px 6px; font-size: 10px; }
+  .field>label, .field-title { font-size: 10px; line-height: 1.2; margin-bottom: 2px; }
+  .field:has(.timepair) select { min-height: 31px; font-size: 12px; padding: 4px 3px; }
+  .timepair select { padding: 4px 2px; font-size: 11px; }
+  .checkrow { min-height: 22px; gap: 4px; }
+  .checkrow label { font-size: 10px; gap: 3px; }
+  input[type=checkbox] { width: 16px; height: 16px; }
+  .pager button { min-height: 31px; }
+}
+</style>
+<style id="large-touch-card-layout">
+/* 押しやすさ優先の入力カード。HTMLのデータ処理・保存キーは変更しない */
+#people .person{padding:14px;border-radius:16px}
+#people .person-head{margin-bottom:14px;gap:10px}
+#people .fields{gap:10px;align-items:stretch}
+#people .field{background:#f7fafd;border:1px solid #d7e2ec;border-radius:12px;padding:10px;min-width:0;}
+#people .field.full{grid-column:1/-1}
+#people .field>label,#people .field-title{font-size:14px;line-height:1.35;margin-bottom:7px;color:#29445b}
+#people input[type=date],#people input[type=text],#people input[type=time],#people select,#people textarea{min-height:50px;font-size:16px;padding:10px 11px;border-radius:10px;width:100%;}
+#people .timepair{gap:7px}
+#people .timepair select{min-height:50px;font-size:15px;padding:8px 5px}
+#people .checkrow{min-height:48px;gap:12px}
+#people .checkrow label{font-size:15px;gap:8px;min-height:42px;padding:4px 2px}
+#people input[type=checkbox]{width:25px;height:25px;flex:0 0 auto}
+#people .conditional-detail{padding:10px;border-radius:10px;margin-top:0}
+#people .type-count-badge{min-height:48px;font-size:14px;border-radius:9px}
+#people .person-foot button{min-height:48px;padding:12px 16px;font-size:15px}
+#saveDay{min-height:50px;padding:13px 17px;font-size:15px}
+#recordDate{min-height:42px;font-size:15px}
+#loadDate{min-height:42px;font-size:13px;padding:9px 11px}
+@media(max-width:430px){
+ main{padding:8px}
+ #people .person{padding:10px;border-radius:14px}
+ #people .fields{gap:8px}
+ #people .field{padding:9px;border-radius:11px}
+ #people .field>label,#people .field-title{font-size:13px;margin-bottom:6px}
+ #people input[type=date],#people input[type=text],#people input[type=time],#people select,#people textarea{min-height:48px;font-size:16px;padding:9px 10px}
+ #people .timepair select{min-height:48px;font-size:14px;padding:7px 3px}
+ #people .checkrow{min-height:46px;gap:9px}
+ #people .checkrow label{font-size:14px;min-height:42px;gap:7px}
+ #people input[type=checkbox]{width:24px;height:24px}
+ #people .type-count-badge{min-height:44px;font-size:12px}
+ #saveDay{width:100%;min-height:52px;font-size:16px}
+}
+</style>
+
+<style id="勤務種別休憩ボタン改善">
+/* 勤務種別の「選択してください」を見切れにくくする */
+#people .type-row{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:8px}
+#people .type-row .field:first-child{min-width:0}
+#people .type-row .field:first-child select{width:100%;min-width:0;font-size:14px;letter-spacing:-.25px;padding-left:7px;padding-right:5px}
+#people .type-row .field{min-width:0}
+#people .type-row .type-count-field{min-width:0}
+#people .person .field:has(.type-count-badge){padding-left:7px;padding-right:7px}
+#people .person .field:has(.type-count-badge) .type-count-badge{white-space:normal;overflow-wrap:anywhere}
+#people .person .field:has(.type-count-badge) label{font-size:12px}
+#people .person .field:has(.type-count-badge) .type-count-badge{font-size:12px}
+#people .person .field:has(.type-count-badge)[hidden]{display:none!important}
+/* 休憩＋ボタンを押しやすく、文字も読みやすく */
+#people .person button[aria-label="休憩時間を入力"]{
+  min-height:32px!important;height:32px!important;
+  padding:5px 10px!important;font-size:13px!important;line-height:1.2!important;
+  border-radius:8px!important;white-space:nowrap;flex-shrink:0
+}
+#people .person .field:has(.type-count-badge) .type-count-badge{min-height:32px}
+@media(max-width:430px){
+  #people .type-row{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:5px}
+  #people .type-row .field:first-child select{font-size:13px!important;padding:7px 4px!important;letter-spacing:-.45px}
+  #people .person button[aria-label="休憩時間を入力"]{min-height:32px!important;height:32px!important;padding:5px 8px!important;font-size:12px!important}
+}
+</style>
+
 </head>
 <body>
 <header>
