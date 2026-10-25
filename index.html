@@ -223,6 +223,14 @@ textarea
     <div id="nameRoster" class="name-roster"></div>
   </section>
 
+
+<section id="personalHolidayDashboard" class="monthly-overtime" style="margin-top:10px">
+<h2>代休・祝代休の管理</h2>
+<div id="personalHolidayBalances" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"></div>
+<div id="personalHolidayCalendar"></div>
+<div id="personalHolidayDates"></div>
+</section>
+
   <div class="reset-area" style="margin:24px 0 18px;padding:14px 0;border-top:1px solid #d5dfe7;text-align:center">
     <button class="danger" id="resetAllData" style="width:100%;max-width:420px">全データリセット</button>
     <div class="note" style="margin-top:6px">勤務記録など、この端末に保存されたデータをすべて削除します。</div>
@@ -673,7 +681,7 @@ function renderMonthlyHolidayWork(){
  if(!names.length){const e=document.createElement('div');e.className='monthly-overtime-note';e.textContent='職員を登録すると祝日勤務時間が表示されます。';root.append(e);return}
  names.forEach(name=>{const row=document.createElement('div');row.className='monthly-overtime-item';const n=document.createElement('span');n.className='monthly-overtime-name';n.textContent=name;const t=document.createElement('span');t.className='monthly-overtime-time';const mins=totals.get(name)||0;t.textContent=`${Math.floor(mins/60)}時間${String(mins%60).padStart(2,'0')}分`;row.append(n,t);root.append(row)});
 }
-function render(){const root=$('people');root.replaceChildren();people=people.slice(0,1);const pages=1;page=Math.max(0,Math.min(page,pages-1));const slice=people.slice(0,1);if(!slice.length){const e=document.createElement('div');e.className='empty';e.textContent='まだ人が登録されていません。「＋ 人を追加」から始めてください。';root.append(e)}else slice.forEach((p,j)=>root.append(createPersonCard(p,page*4+j)));$('pageLabel').textContent=`${page+1} / ${pages} ページ（全${people.length}人）`;$('prevPage').disabled=page===0;$('nextPage').disabled=page>=pages-1;$('prevPage').style.opacity=page===0?'.45':'1';$('nextPage').style.opacity=page>=pages-1?'.45':'1';renderMonthlyOvertime();renderMonthlyHolidayWork();renderSavedDates()}
+function render(){const root=$('people');root.replaceChildren();people=people.slice(0,1);const pages=1;page=Math.max(0,Math.min(page,pages-1));const slice=people.slice(0,1);if(!slice.length){const e=document.createElement('div');e.className='empty';e.textContent='まだ人が登録されていません。「＋ 人を追加」から始めてください。';root.append(e)}else slice.forEach((p,j)=>root.append(createPersonCard(p,page*4+j)));$('pageLabel').textContent=`${page+1} / ${pages} ページ（全${people.length}人）`;$('prevPage').disabled=page===0;$('nextPage').disabled=page>=pages-1;$('prevPage').style.opacity=page===0?'.45':'1';$('nextPage').style.opacity=page>=pages-1?'.45':'1';renderMonthlyOvertime();renderMonthlyHolidayWork();renderSavedDates();renderPersonalHolidayDashboard()}
 function renderSavedDates(){
  const root=$('savedDates');if(!root)return;root.replaceChildren();
  const dates=Object.keys(records).filter(d=>records[d]&&Array.isArray(records[d].people)).sort((a,b)=>a.localeCompare(b));
@@ -881,6 +889,28 @@ function specialLeaveCountForCalendar(name,type,date,person){
  return Math.max(1,sameDay.length);
 }
 
+function renderPersonalHolidayDashboard(){
+ const root=$('personalHolidayDashboard');if(!root)return;
+ const name=(savedNames[0]||people[0]?.name||'').trim();
+ const balances=$('personalHolidayBalances');balances.replaceChildren();
+ const datesRoot=$('personalHolidayDates');datesRoot.replaceChildren();
+ if(!name){balances.textContent='先に名前を登録してください。';$('personalHolidayCalendar').replaceChildren();return;}
+ const comp=availableDatesFor(name,'compensatory'),hol=availableDatesFor(name,'holiday');
+ [[`代休残 ${comp.length}日`,'#e8f1fa'],[`祝代休残 ${hol.length}日`,'#fff0e8']].forEach(([t,c])=>{const b=document.createElement('strong');b.textContent=t;b.style.cssText=`display:inline-block;padding:8px 12px;border-radius:9px;background:${c};`;balances.append(b)});
+ const calendar=$('personalHolidayCalendar');calendar.replaceChildren();renderPersonCalendar(name,calendar);
+ [['compensatory','代休発生日'],['holiday','祝代休発生日']].forEach(([key,title])=>{
+  const box=document.createElement('div');box.style.cssText='border-top:1px solid #d8e0e6;padding-top:10px;margin-top:10px';
+  const h=document.createElement('h3');h.textContent=title;box.append(h);
+  const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;align-items:center';
+  const input=document.createElement('input');input.type='date';input.style.cssText='flex:1;min-width:0';
+  const add=document.createElement('button');add.type='button';add.className='primary';add.textContent='日付を登録';
+  add.addEventListener('click',()=>{if(!input.value){alert('日付を選択してください。');return;}if(!addRegisteredHolidayDate(name,key,input.value)){alert('その日付は登録済みです。');return;}renderPersonalHolidayDashboard();});
+  row.append(input,add);box.append(row);
+  const list=document.createElement('div');
+  datesFor(name,key).slice().sort().forEach(ds=>{const item=document.createElement('div');item.className='holiday-date-item';const label=document.createElement('span');label.textContent=ds+(usedDatesFor(name,key).includes(ds)?'（使用済み）':'');const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='削除';del.addEventListener('click',()=>{if(!confirm(`${ds}を削除しますか？`))return;holidayDates[name][key]=datesFor(name,key).filter(d=>d!==ds);writeHolidayDates();renderPersonalHolidayDashboard();});item.append(label,del);list.append(item)});
+  box.append(list);datesRoot.append(box);
+ });
+}
 function closeNameDetail(){
  editingHolidayName='';
  const editor=document.querySelector('.holiday-editor.detail-page');
@@ -905,7 +935,7 @@ $('registerName').addEventListener('click',()=>{
  input.value='';
  if(people.length===0){people=[blankPerson(1)];people[0].name=name;dirty=true;}
  else {people=people.slice(0,1);people[0].name=name;dirty=true;}
- page=0;render();$('status').textContent='名前を設定しました。勤務記録を保存してください。';
+ page=0;render();$('status').textContent='名前を設定しました。勤務記録を保存してください。';renderPersonalHolidayDashboard();
 });
 $('newName').addEventListener('keydown',e=>{if(e.key==='Enter')$('registerName').click()});
 // 起動時は「新規作成」ボタンを押した直後と同じ、空の入力画面から始める。保存済みデータは変更しない。
@@ -914,6 +944,7 @@ people=savedNames.length?[{...blankPerson(1),name:savedNames[0]}]:[];
 page=0;dirty=false;$('recordDate').value=currentDate;render();
 $('status').textContent='新規入力画面（未保存）';
 renderNameRoster();
+renderPersonalHolidayDashboard();
 })();
 </script>
 </body>
