@@ -690,12 +690,14 @@ function renderSavedDates(){
  dates.forEach(d=>{const parts=d.split('-').map(Number);const fy=parts[1]>=4?parts[0]:parts[0]-1;if(!years.has(fy))years.set(fy,new Map());const month=parts[1];if(!years.get(fy).has(month))years.get(fy).set(month,[]);years.get(fy).get(month).push(d)});
  const currentParts=(currentDate||$('recordDate').value||localDate()).split('-').map(Number);
  const currentFY=currentParts[1]>=4?currentParts[0]:currentParts[0]-1;
+ const todayParts=localDate().split('-').map(Number);
+ const todayFY=todayParts[1]>=4?todayParts[0]:todayParts[0]-1;
  [...years.keys()].sort((a,b)=>a-b).forEach(fy=>{
   const yearDetails=document.createElement('details');yearDetails.className='saved-group saved-year';yearDetails.open=fy===currentFY;
   const yearSummary=document.createElement('summary');yearSummary.style.cssText='font-weight:800;padding:10px 4px;cursor:pointer;border-top:1px solid #dce5ec';yearSummary.textContent=`${fy}年度`;yearDetails.append(yearSummary);
   [...years.get(fy).keys()].sort((a,b)=>a-b).forEach(month=>{
    const monthDates=years.get(fy).get(month);const monthDetails=document.createElement('details');monthDetails.className='saved-group saved-month';monthDetails.open=false;
-   const monthSummary=document.createElement('summary');monthSummary.style.cssText='font-weight:700;padding:8px 6px;cursor:pointer;background:#f4f7fa;border-radius:6px;margin:4px 0';monthSummary.textContent=`${month}月（${monthDates.length}日）${fy===currentFY&&month===currentParts[1]?' ※当月':''}`;monthDetails.append(monthSummary);
+   const monthSummary=document.createElement('summary');monthSummary.style.cssText='font-weight:700;padding:8px 6px;cursor:pointer;background:#f4f7fa;border-radius:6px;margin:4px 0';monthSummary.textContent=`${month}月（${monthDates.length}日）${fy===todayFY&&month===todayParts[1]?' ※当月':''}`;monthDetails.append(monthSummary);
    monthDates.forEach(d=>{
     const row=document.createElement('div');row.className='saved-entry';row.style.paddingLeft='8px';
     const label=document.createElement('div');label.className='date-label';label.textContent=d;
