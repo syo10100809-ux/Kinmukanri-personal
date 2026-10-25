@@ -195,7 +195,7 @@ textarea
     <button class="danger" id="newDay">新規作成</button>
     <button class="secondary" id="saveDay">この日の内容を保存</button>
     <button class="secondary" id="exportData">バックアップ保存</button>
-    <button class="secondary" id="importBtn">復元</button>
+    <button class="secondary" id="importBtn">データ読込</button>
     
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <span class="status" id="status">端末内に自動保存</span>
@@ -232,21 +232,28 @@ textarea
 (function(){
 const TYPES=['日勤','週休','代休','祝休','祝代休','夏特','夏休','冬休','年休'];
 const $=id=>document.getElementById(id);
-const STORAGE='workResultRecords_v1';
+// 保存領域をアプリ別に分離。新しい保存先が空の場合のみ、旧データを引き継ぐ。
+const STORAGE_PREFIX='workResultPersonal';
+const STORAGE_KEYS={records:STORAGE_PREFIX+'Records_v1',names:STORAGE_PREFIX+'Names_v1',dispatch:STORAGE_PREFIX+'DispatchPlaces_v1',holiday:STORAGE_PREFIX+'HolidayDates_v1',autoHoliday:STORAGE_PREFIX+'AutoHolidayDates_v1'};
+(function migrateLegacyStorage(){
+ const pairs=[['workResultRecords_v1',STORAGE_KEYS.records],['workResultNames_v1',STORAGE_KEYS.names],['workResultDispatchPlaces_v1',STORAGE_KEYS.dispatch],['workResultHolidayDates_v1',STORAGE_KEYS.holiday],['workResultAutoHolidayDates_v1',STORAGE_KEYS.autoHoliday]];
+ try{pairs.forEach(([oldKey,newKey])=>{if(localStorage.getItem(newKey)===null&&localStorage.getItem(oldKey)!==null)localStorage.setItem(newKey,localStorage.getItem(oldKey));});}catch(e){}
+})();
+const STORAGE=STORAGE_KEYS.records;
 let records=readStore(), currentDate=localDate(), people=[], page=0, dirty=false;
-const NAME_STORAGE='workResultNames_v1';
+const NAME_STORAGE=STORAGE_KEYS.names;
 // 名前照合用：前後の空白を除き、半角・全角スペースの違いを統一する。
 function normalizePersonName(value){
  return String(value||'').normalize('NFKC').replace(/[\\s\\u3000]+/g,'').trim();
 }
 
-const DISPATCH_PLACE_STORAGE='workResultDispatchPlaces_v1';
+const DISPATCH_PLACE_STORAGE=STORAGE_KEYS.dispatch;
 let savedDispatchPlaces=readDispatchPlaces();
 function readDispatchPlaces(){try{const x=JSON.parse(localStorage.getItem(DISPATCH_PLACE_STORAGE)||'[]');return Array.isArray(x)?x.filter(v=>typeof v==='string'&&v.trim()):[]}catch(e){return []}}
 function writeDispatchPlaces(){try{localStorage.setItem(DISPATCH_PLACE_STORAGE,JSON.stringify(savedDispatchPlaces));return true}catch(e){return false}}
 function rememberDispatchPlace(value){const v=String(value||'').trim();if(!v)return;if(!savedDispatchPlaces.includes(v)){savedDispatchPlaces.push(v);savedDispatchPlaces.sort((a,b)=>a.localeCompare(b,'ja'));writeDispatchPlaces()}}
-const HOLIDAY_STORAGE='workResultHolidayDates_v1';
-const AUTO_HOLIDAY_STORAGE='workResultAutoHolidayDates_v1';
+const HOLIDAY_STORAGE=STORAGE_KEYS.holiday;
+const AUTO_HOLIDAY_STORAGE=STORAGE_KEYS.autoHoliday;
 let autoHolidayDates=readAutoHolidayDates();
 function readAutoHolidayDates(){try{const x=JSON.parse(localStorage.getItem(AUTO_HOLIDAY_STORAGE)||'{}');return x&&typeof x==='object'?x:{}}catch(e){return {}}}
 function writeAutoHolidayDates(){try{localStorage.setItem(AUTO_HOLIDAY_STORAGE,JSON.stringify(autoHolidayDates));return true}catch(e){return false}}
@@ -731,13 +738,7 @@ $('resetAllData').addEventListener('click',()=>{
   const message='【全データリセット】\n\nこの端末に保存された勤務記録、名前、代休・祝代休の登録日、派遣場所などをすべて削除します。\nこの操作は取り消せません。先に「バックアップ保存」を行うことをおすすめします。\n\n本当にリセットしますか？';
   if(!confirm(message))return;
   if(!confirm('最終確認：保存データをすべて削除します。実行してよろしいですか？'))return;
-  [
-    'workResultRecords_v1',
-    'workResultNames_v1',
-    'workResultDispatchPlaces_v1',
-    'workResultHolidayDates_v1',
-    'workResultAutoHolidayDates_v1'
-  ].forEach(key=>localStorage.removeItem(key));
+  Object.values(STORAGE_KEYS).forEach(key=>localStorage.removeItem(key));
   alert('この端末の勤務管理データをリセットしました。');
   location.reload();
 });
@@ -760,7 +761,7 @@ $('importFile').addEventListener('change',async e=>{
    const existing=records[item.date]?.people||[];
    if(existing.some(p=>p&&p.name===item.name))duplicates.push(item);
   });
-  let message=`個人データを取り込みます。\n対象：${preview.length}件の勤務記録`;
+  let message=`データを読み込みます。\n対象：${preview.length}件の勤務記録`;
   if(duplicates.length)message+=`\n\n同じ職員・同じ日付の記録が${duplicates.length}件あります。該当する職員の記録だけを置き換えます。他の職員の記録は残ります。`;
   message+='\n\n続けますか？';
   if(!confirm(message))return;
