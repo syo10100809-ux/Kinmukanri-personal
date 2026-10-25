@@ -218,7 +218,7 @@ textarea
       <input type="text" id="newName" placeholder="自分の名前を入力" maxlength="40">
       <button id="registerName">名前を設定</button>
     </div>
-    <div class="note">名前を設定すると、この端末の個人用勤務記録に使われます。</div>
+    <div class="note">この端末で使う名前を1人分だけ設定できます。変更しても過去の勤務記録は削除されません。</div>
     <div id="nameRoster" class="name-roster"></div>
   </section>
 </main>
@@ -258,7 +258,7 @@ function cancelAutoHolidayDate(name,key,dateStr){
   writeHolidayDates();
  }
 }
-let savedNames=readNames();
+let savedNames=readNames().slice(0,1);
 let holidayDates=readHolidayDates();
 let editingHolidayName='';
 function readNames(){try{return JSON.parse(localStorage.getItem(NAME_STORAGE)||'[]').filter(n=>typeof n==='string')}catch(e){return []}}
@@ -867,158 +867,10 @@ function closeNameDetail(){
 window.addEventListener('popstate',()=>{
  if(location.hash!=='#name-detail')closeNameDetail();
 });
-function recoverNamesFromRecords(){
- const recovered=[];
- Object.values(records).forEach(rec=>{
-  if(!rec||!Array.isArray(rec.people))return;
-  rec.people.forEach(person=>{
-   const name=typeof person?.name==='string'?person.name.trim():'';
-   if(name&&!/^\\d+人目$/.test(name)&&!recovered.includes(name))recovered.push(name);
-  });
- });
- let changed=false;
- recovered.forEach(name=>{if(!savedNames.includes(name)){savedNames.push(name);changed=true}});
- if(changed){
-  savedNames.sort((a,b)=>a.localeCompare(b,'ja'));
-  try{localStorage.setItem(NAME_STORAGE,JSON.stringify(savedNames))}catch(e){}
- }
- return changed;
-}
+function recoverNamesFromRecords(){ return false; }
 function renderNameRoster(){
- recoverNamesFromRecords();
- const root=$('nameRoster');if(!root)return;root.replaceChildren();
- const summary=document.createElement('button');
- summary.type='button';summary.className='name-count';
- summary.textContent=savedNames.length ? `${savedNames.length}人登録済み ▾` : '登録済みの名前はありません';
- summary.setAttribute('aria-expanded','false');
- const list=document.createElement('div');list.className='name-list';list.hidden=true;
- list.style.cssText='display:none;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:6px;width:100%;margin-top:7px';
- const editor=document.createElement('div');editor.className='holiday-editor';editor.hidden=true;
- function renderEditor(name){
-   editor.replaceChildren();
-   if(!name){editor.hidden=true;return}
-   editor.hidden=false;
-   editor.classList.add('detail-page');
-   const pageHead=document.createElement('div');pageHead.className='detail-page-head';
-   const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent='‹ 戻る';
-   back.style.cssText='background:#fff;color:#17324d';
-   back.addEventListener('click',()=>{if(location.hash==='#name-detail')history.back();else closeNameDetail();});
-   const pageTitle=document.createElement('strong');pageTitle.textContent=`${name}の個別管理`;
-   pageHead.append(back,pageTitle);editor.append(pageHead);
-   const title=document.createElement('h3');title.textContent='';title.hidden=true;editor.append(title);
-   renderPersonCalendar(name,editor);
-   const makeDateSection=(key,label)=>{
-     const heading=document.createElement('div');heading.style.fontWeight='700';heading.style.marginTop='8px';heading.textContent=label;editor.append(heading);
-     const row=document.createElement('div');row.className='holiday-editor-row';
-     const input=document.createElement('input');input.type='date';input.setAttribute('aria-label',label);
-     const add=document.createElement('button');add.type='button';add.textContent='日付を登録';add.className='small';
-     add.addEventListener('click',()=>{
-       if(!input.value){alert('日付を選択してください。');return}
-       holidayDates[name]=holidayDates[name]||{compensatory:[],holiday:[]};
-       holidayDates[name][key]=Array.isArray(holidayDates[name][key])?holidayDates[name][key]:[];
-       if(!holidayDates[name][key].includes(input.value)){holidayDates[name][key].push(input.value);holidayDates[name][key].sort();writeHolidayDates()}
-       renderEditor(name);render();
-     });
-     row.append(input,add);editor.append(row);
-     const dates=datesFor(name,key),used=usedDatesFor(name,key);
-     const count=document.createElement('div');count.className='note';count.textContent=`未取得候補：${availableDatesFor(name,key).length}日 ／ 取得済み：${used.length}日`;editor.append(count);
-     if(!dates.length){const empty=document.createElement('div');empty.className='note';empty.textContent='登録された日付はありません。';editor.append(empty)}
-     dates.forEach((date,idx)=>{
-       const item=document.createElement('div');item.className='holiday-date-item';
-       const txt=document.createElement('span');txt.textContent=date+(used.includes(date)?'（取得済み）':'');
-       const del=document.createElement('button');del.type='button';del.className='name-delete';del.textContent='削除';del.style.cssText='flex-shrink:0;margin:0';
-       del.addEventListener('click',()=>{
-         if(!confirm(`${name}さんの${label}「${date}」を削除しますか？`))return;
-         holidayDates[name][key]=datesFor(name,key).filter((_,j)=>j!==idx);writeHolidayDates();renderEditor(name);render();
-       });
-       item.append(txt,del);editor.append(item);
-     });
-   };
-   makeDateSection('compensatory','代休発生日');
-   makeDateSection('holiday','祝代休発生日');
-
-   // 選択中の日付が属する年度（4月1日〜翌年3月31日）の特別休暇取得数を表示
-   const yearStart = fiscalYearOf(currentDate);
-   const yearEnd = yearStart + 1;
-   const summaryBox = document.createElement('div');
-   summaryBox.style.cssText='margin-top:12px;padding:10px;border:1px solid #cbd8e3;border-radius:8px;background:#f4f8fb';
-   const summaryTitle = document.createElement('h3');
-   summaryTitle.style.cssText='margin:0 0 7px;font-size:15px';
-   summaryTitle.textContent=`${yearStart}年度 夏特・夏休・冬休の取得状況`;
-   summaryBox.append(summaryTitle);
-   const summaryNote = document.createElement('div');
-   summaryNote.className='note';
-   summaryNote.textContent='登録済みの勤務記録から集計（4月1日〜翌年3月31日）';
-   summaryBox.append(summaryNote);
-   const annualCounts = {'夏特':0,'夏休':0,'冬休':0};
-   Object.keys(records).forEach(date=>{
-     if(date===currentDate)return;
-     const fy=fiscalYearOf(date);
-     if(fy!==yearStart)return;
-     const rec=records[date];
-     if(!rec||!Array.isArray(rec.people))return;
-     rec.people.forEach(person=>{
-       if(person&&person.name===name&&Object.prototype.hasOwnProperty.call(annualCounts,person.type))annualCounts[person.type]++;
-     });
-   });
-   people.forEach(person=>{
-     if(person&&person.name===name&&Object.prototype.hasOwnProperty.call(annualCounts,person.type))annualCounts[person.type]++;
-   });
-   const annualLimits = {'夏特':5,'夏休':7,'冬休':3};
-   ['夏特','夏休','冬休'].forEach(type=>{
-     const line=document.createElement('div');
-     line.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #e0e7ed;font-weight:700';
-     const label=document.createElement('span');label.textContent=type;
-     const count=document.createElement('span');count.textContent=`${annualCounts[type]}日`;
-     line.append(label,count);summaryBox.append(line);
-     if(annualCounts[type]>annualLimits[type]){
-       const warning=document.createElement('div');
-       warning.textContent='※取得上限回数を超えています';
-       warning.style.cssText='color:#c00000;font-size:13px;font-weight:700;margin:0 0 5px';
-       summaryBox.append(warning);
-     }
-   });
-   editor.append(summaryBox);
-
-   const close=document.createElement('button');close.type='button';close.className='secondary';close.style.marginTop='12px';close.textContent='戻る';
-   close.addEventListener('click',()=>{if(location.hash==='#name-detail')history.back();else closeNameDetail()});
-   editor.append(close);
- }
- savedNames.forEach((name,i)=>{
-   const item=document.createElement('div');item.className='name-list-item';
-   item.style.cssText='display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #d5dfe7;border-radius:7px;background:#f4f7fa';
-   const label=document.createElement('span');label.className='name-list-label';
-   const compCount=availableDatesFor(name,'compensatory').length;
-   const holidayCount=availableDatesFor(name,'holiday').length;
-   label.textContent=`${i+1}. ${name}（代休残${compCount}・祝代休残${holidayCount}）`;label.title='クリックして代休の日付を登録・残数を確認';
-   label.style.cssText='display:block;flex:1;min-width:0;overflow-wrap:anywhere;cursor:pointer;text-decoration:underline;text-underline-offset:2px';
-   label.addEventListener('click',()=>{
-     editingHolidayName=name;
-     if(location.hash!=='#name-detail')history.pushState({nameDetail:true},'', '#name-detail');
-     renderEditor(name);
-     window.scrollTo(0,0);
-   });
-   const del=document.createElement('button');del.type='button';del.className='name-delete';del.textContent='削除';
-   del.addEventListener('click',()=>{
-     if(!confirm(`登録名「${name}」を削除しますか？\n勤務記録にすでに入力された名前は、その記録には残ります。`))return;
-     savedNames=savedNames.filter((_,idx)=>idx!==i);
-     writeNames();renderNameRoster();render();
-   });
-   item.append(label,del);list.append(item);
- });
- summary.addEventListener('click',()=>{
-   list.hidden=!list.hidden;
-   list.style.display=list.hidden?'none':'flex';
-   summary.setAttribute('aria-expanded',String(!list.hidden));
-   summary.textContent=savedNames.length ? `${savedNames.length}人登録済み ${list.hidden?'▾':'▴'}` : '登録済みの名前はありません';
-   if(!list.hidden){
-     requestAnimationFrame(()=>{
-       list.scrollIntoView({behavior:'smooth',block:'start'});
-     });
-   }
- });
- root.append(summary,list,editor);
- if(editingHolidayName&&savedNames.includes(editingHolidayName))renderEditor(editingHolidayName);
+ const root=$('nameRoster');
+ if(root){root.replaceChildren();root.hidden=true;}
 }
 $('registerName').addEventListener('click',()=>{
  const input=$('newName');const name=input.value.trim();
