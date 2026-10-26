@@ -266,6 +266,31 @@ textarea
   #people .type-row .field:first-child select{font-size:13px!important;padding:7px 4px!important;letter-spacing:-.45px}
   #people .person button[aria-label="休憩時間を入力"]{min-height:32px!important;height:32px!important;padding:5px 8px!important;font-size:12px!important}
 }
+
+/* 代休発生日・祝代休発生日のラベルと日付欄がスマホで見切れないようにする */
+#people .type-row .field:has(select[aria-label="代休発生日"]),
+#people .type-row .field:has(select[aria-label="祝代休発生日"]){
+  grid-column:1/-1;
+  min-width:0;
+}
+#people .type-row .field:has(select[aria-label="代休発生日"]) select,
+#people .type-row .field:has(select[aria-label="祝代休発生日"]) select{
+  width:100%;
+  min-width:0;
+}
+@media(max-width:430px){
+  #people .type-row .field:has(select[aria-label="代休発生日"]),
+  #people .type-row .field:has(select[aria-label="祝代休発生日"]){
+    padding:7px 9px;
+  }
+  #people .type-row .field:has(select[aria-label="代休発生日"])>label,
+  #people .type-row .field:has(select[aria-label="祝代休発生日"])>label{
+    white-space:normal;
+    overflow-wrap:anywhere;
+    line-height:1.25;
+    margin-bottom:4px;
+  }
+}
 </style>
 
 </head>
