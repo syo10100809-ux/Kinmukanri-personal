@@ -1041,7 +1041,7 @@ function renderPersonCalendar(name, container){
  function recordsForDate(ds){
    const rec=records[ds];
    const source=(ds===currentDate&&dirty)?people:(rec&&Array.isArray(rec.people)?rec.people:[]);
-   return source.filter(p=>p&&p.name===name);
+   return source.filter(p=>p&&normalizePersonName(p.name)===normalizePersonName(name));
  }
  function renderMonth(){
    monthLabel.textContent=`${shownYear}年${shownMonth+1}月`;
@@ -1106,7 +1106,7 @@ function specialLeaveCountForCalendar(name,type,date,person){
 
 function renderPersonalHolidayDashboard(){
  const root=$('personalHolidayDashboard');if(!root)return;
- const name=(savedNames[0]||people[0]?.name||'').trim();
+ const name=(preferredName||savedNames[0]||people[0]?.name||'').trim();
  const balances=$('personalHolidayBalances');balances.replaceChildren();
  const datesRoot=$('personalHolidayDates');datesRoot.replaceChildren();
  if(!name){balances.textContent='先に名前を登録してください。';$('personalHolidayCalendar').replaceChildren();return;}
