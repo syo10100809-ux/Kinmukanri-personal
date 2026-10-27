@@ -365,9 +365,10 @@ const STORAGE_KEYS={records:STORAGE_PREFIX+'Records_v1',names:STORAGE_PREFIX+'Na
 const STORAGE=STORAGE_KEYS.records;
 let records=readStore(), currentDate=localDate(), people=[], page=0, dirty=false;
 const NAME_STORAGE=STORAGE_KEYS.names;
+const PREFERRED_NAME_STORAGE=STORAGE_PREFIX+'PreferredName_v1';
 // 名前照合用：前後の空白を除き、半角・全角スペースの違いを統一する。
 function normalizePersonName(value){
- return String(value||'').normalize('NFKC').replace(/[\\s\\u3000]+/g,'').trim();
+ return String(value||'').normalize('NFKC').replace(/[\s\u3000]+/g,'').trim();
 }
 
 const DISPATCH_PLACE_STORAGE=STORAGE_KEYS.dispatch;
@@ -394,7 +395,25 @@ function cancelAutoHolidayDate(name,key,dateStr){
   writeHolidayDates();
  }
 }
-let savedNames=readNames().slice(0,1);
+let savedNames=dedupeNames(readNames());
+let preferredName='';
+try{preferredName=localStorage.getItem(PREFERRED_NAME_STORAGE)||''}catch(e){}
+if(!preferredName&&savedNames.length){preferredName=savedNames[0];try{localStorage.setItem(PREFERRED_NAME_STORAGE,preferredName)}catch(e){}}
+if(preferredName){
+ const match=savedNames.find(n=>normalizePersonName(n)===normalizePersonName(preferredName));
+ if(match)preferredName=match;
+ savedNames=dedupeNames([preferredName,...savedNames]);
+}
+function dedupeNames(list){
+ const out=[], seen=new Set();
+ (Array.isArray(list)?list:[]).forEach(value=>{
+  if(typeof value!=='string')return;
+  const name=value.trim(), key=normalizePersonName(name);
+  if(!name||!key||seen.has(key))return;
+  seen.add(key);out.push(name);
+ });
+ return out;
+}
 let holidayDates=readHolidayDates();
 let editingHolidayName='';
 function readNames(){try{return JSON.parse(localStorage.getItem(NAME_STORAGE)||'[]').filter(n=>typeof n==='string')}catch(e){return []}}
@@ -494,7 +513,7 @@ function autoRegisterWorkDate(person){
  }
 }
 
-function writeNames(){try{localStorage.setItem(NAME_STORAGE,JSON.stringify(savedNames));renderNameRoster();return true}catch(e){alert('名前を保存できませんでした。端末の空き容量を確認してください。');return false}}
+function writeNames(){savedNames=dedupeNames(savedNames);try{localStorage.setItem(NAME_STORAGE,JSON.stringify(savedNames));renderNameRoster();return true}catch(e){alert('名前を保存できませんでした。端末の空き容量を確認してください。');return false}}
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function readStore(){try{return JSON.parse(localStorage.getItem(STORAGE)||'{}')}catch(e){return {}}}
 function writeStore(){try{localStorage.setItem(STORAGE,JSON.stringify(records));$('status').textContent='保存済み ✓';dirty=false;renderSavedDates();renderNameRoster();return true}catch(e){$('status').textContent='保存できません。バックアップを確認';return false}}
@@ -539,19 +558,28 @@ function blankPerson(n){return {name:`${n}人目`,workStart:'08:30',workEnd:'17:
 function normalize(p,i){const q={...blankPerson(i+1),...p};if(q.type==='日勤'){if(!q.workStart)q.workStart='08:30';if(!q.workEnd)q.workEnd='17:15';}else if(!q.type){q.workStart='';q.workEnd='';}return q}
 // 勤務記録の日付は勤務開始日（選択中の日付）で管理する。翌日終了でも保存先の日付は変えない。
 function loadDay(date){
+ // 選択中の職員名と一致する記録だけを読み込む。
  currentDate=date;
- if(records[date]&&Array.isArray(records[date].people)){
-  const ownName=savedNames[0]||'';
-  const own=ownName?records[date].people.find(p=>p&&p.name===ownName):records[date].people[0];
-  people=own?[normalize(own,0)]:[];
- }else{
-  people=savedNames.length?[{...blankPerson(1),name:savedNames[0]}]:[];
- }
+ const ownName=(preferredName||savedNames[0]||'').trim();
+ const dayPeople=records[date]&&Array.isArray(records[date].people)?records[date].people:[];
+ const own=ownName?dayPeople.find(p=>p&&normalizePersonName(p.name)===normalizePersonName(ownName)):dayPeople[0];
+ if(own) people=[normalize(own,0)];
+ else if(ownName) people=[{...blankPerson(1),name:ownName}];
+ else people=[];
  page=0;dirty=false;$('recordDate').value=date;
  people.forEach(autoRegisterWorkDate);render();
- $('status').textContent=records[date]?'保存済みデータを表示':'新しい日付（未保存）';
+ $('status').textContent=own?'保存済み勤務記録を表示':(ownName?'この職員の記録は未登録です':'新しい日付（未保存）');
 }
-function saveDay(show=true){records[currentDate]={people:people.map(p=>({...p}))};const ok=writeStore();if(show&&ok)$('status').textContent='保存しました ✓';renderSavedDates();renderNameRoster()}
+function saveDay(show=true){
+ const existing=Array.isArray(records[currentDate]?.people)?records[currentDate].people.map(p=>({...p})):[];
+ (people||[]).forEach(person=>{
+  if(!person||!normalizePersonName(person.name))return;
+  const idx=existing.findIndex(p=>p&&normalizePersonName(p.name)===normalizePersonName(person.name));
+  if(idx>=0)existing[idx]={...person};else existing.push({...person});
+ });
+ records[currentDate]={people:existing};
+ const ok=writeStore();if(show&&ok)$('status').textContent='保存しました ✓';renderSavedDates();renderNameRoster()
+}
 function markDirty(){dirty=true;$('status').textContent='未保存の変更あり';renderMonthlyOvertime();renderMonthlyHolidayWork()}
 function timeSelect(value,field,index,label,onChangeExtra){let s=document.createElement('select');s.setAttribute('aria-label',label);let empty=document.createElement('option');empty.value='';empty.textContent='--:--';s.appendChild(empty);overnightTimes.forEach(t=>{let o=document.createElement('option');o.value=t.value;o.textContent=t.label;s.appendChild(o)});s.value=value||'';s.addEventListener('change',()=>{people[index][field]=s.value;if(onChangeExtra)onChangeExtra(s.value);markDirty();updateOvertimeDisplay(index)});return s}
 function checkbox(label,key,p,index){
@@ -598,7 +626,22 @@ function createPersonCard(p,i){
  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='名前を選択';name.append(placeholder);
  const nameOptions=[...savedNames];if(p.name&&!nameOptions.includes(p.name))nameOptions.push(p.name);
  nameOptions.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;name.append(o)});
- name.value=p.name||'';name.addEventListener('change',()=>{people[i].name=name.value;autoRegisterWorkDate(people[i]);markDirty();render()});
+ name.value=p.name||'';name.addEventListener('change',()=>{
+  const selected=name.value;
+  if(!selected)return;
+  // この名前選択を「使用者」の切替として扱い、以後の読み込みも同じ職員を最優先にする。
+  // 以前はカードの表示だけを切り替え、preferredName が宮崎さんのまま残るため、
+  // 日付を開き直すと宮崎さんの勤務内容へ戻ってしまっていた。
+  if(dirty&&!confirm('未保存の変更があります。保存せずに職員を切り替えますか？')){
+    render();return;
+  }
+  preferredName=savedNames.find(n=>normalizePersonName(n)===normalizePersonName(selected))||selected;
+  savedNames=dedupeNames([preferredName,...savedNames]);
+  try{localStorage.setItem(PREFERRED_NAME_STORAGE,preferredName)}catch(e){}
+  try{localStorage.setItem(NAME_STORAGE,JSON.stringify(savedNames))}catch(e){}
+  loadDay(currentDate);
+  $('status').textContent='選択中の職員：'+preferredName;
+ });
  const del=document.createElement('button');del.className='small danger';del.textContent='削除';del.addEventListener('click',()=>{if(confirm(`${p.name||`${i+1}人目`}をこの日から削除しますか？`)){people.splice(i,1);page=Math.min(page,Math.max(0,Math.ceil(people.length/4)-1));markDirty();render()}});head.append(num,name,del);card.append(head);
  const fields=document.createElement('div');fields.className='fields';
  const typeRow=document.createElement('div');typeRow.className='type-row';
@@ -799,8 +842,14 @@ function renderMonthlyHolidayWork(){
 function render(){const root=$('people');root.replaceChildren();people=people.slice(0,1);const pages=1;page=Math.max(0,Math.min(page,pages-1));const slice=people.slice(0,1);if(!slice.length){const e=document.createElement('div');e.className='empty';e.textContent='まだ人が登録されていません。「＋ 人を追加」から始めてください。';root.append(e)}else slice.forEach((p,j)=>root.append(createPersonCard(p,page*4+j)));$('pageLabel').textContent=`${page+1} / ${pages} ページ（全${people.length}人）`;$('prevPage').disabled=page===0;$('nextPage').disabled=page>=pages-1;$('prevPage').style.opacity=page===0?'.45':'1';$('nextPage').style.opacity=page>=pages-1?'.45':'1';renderMonthlyOvertime();renderMonthlyHolidayWork();renderSavedDates();renderPersonalHolidayDashboard()}
 function renderSavedDates(){
  const root=$('savedDates');if(!root)return;root.replaceChildren();
- const dates=Object.keys(records).filter(d=>records[d]&&Array.isArray(records[d].people)).sort((a,b)=>a.localeCompare(b));
- if(!dates.length){const p=document.createElement('div');p.className='note';p.textContent='保存された日付はまだありません。';root.append(p);return}
+ const ownName=String(preferredName||savedNames[0]||'').trim();
+ const ownKey=normalizePersonName(ownName);
+ // 選択中の職員の記録が存在する日付だけを表示する。
+ const dates=Object.keys(records).filter(d=>
+  ownKey && records[d] && Array.isArray(records[d].people) &&
+  records[d].people.some(p=>p&&normalizePersonName(p.name)===ownKey)
+ ).sort((a,b)=>a.localeCompare(b));
+ if(!dates.length){const p=document.createElement('div');p.className='note';p.textContent=ownName?`${ownName}さんの保存済み日付はありません。`:'先に「自分の名前」を設定してください。';root.append(p);return}
  const years=new Map();
  dates.forEach(d=>{const parts=d.split('-').map(Number);const fy=parts[1]>=4?parts[0]:parts[0]-1;if(!years.has(fy))years.set(fy,new Map());const month=parts[1];if(!years.get(fy).has(month))years.get(fy).set(month,[]);years.get(fy).get(month).push(d)});
  const currentParts=(currentDate||$('recordDate').value||localDate()).split('-').map(Number);
@@ -816,9 +865,16 @@ function renderSavedDates(){
    monthDates.forEach(d=>{
     const row=document.createElement('div');row.className='saved-entry';row.style.paddingLeft='8px';
     const label=document.createElement('div');label.className='date-label';label.textContent=d;
-    const small=document.createElement('small');small.textContent=`${records[d].people.length}人`;
+    const small=document.createElement('small');small.textContent=ownName;
     const open=document.createElement('button');open.className='small';open.textContent='開く';open.addEventListener('click',()=>{loadDay(d);window.scrollTo({top:0,behavior:'smooth'});});
-    const del=document.createElement('button');del.className='small danger';del.textContent='削除';del.addEventListener('click',()=>{if(confirm(`${d}の保存データを削除しますか？`)){delete records[d];writeStore();if(currentDate===d){people=[];page=0;render()}renderSavedDates()}});
+    const del=document.createElement('button');del.className='small danger';del.textContent='削除';del.addEventListener('click',()=>{
+      if(!confirm(`${d}の${ownName}さんの勤務記録だけを削除しますか？\\n他の職員の記録は残ります。`))return;
+      const arr=Array.isArray(records[d]?.people)?records[d].people:[];
+      const remaining=arr.filter(p=>!p||normalizePersonName(p.name)!==ownKey);
+      if(remaining.length)records[d]={...records[d],people:remaining};else delete records[d];
+      writeStore();
+      if(currentDate===d)loadDay(d);else renderSavedDates();
+    });
     row.append(label,small,open,del);monthDetails.append(row);
    });
    yearDetails.append(monthDetails);
@@ -863,7 +919,7 @@ $('resetAllData').addEventListener('click',()=>{
   const message='【全データリセット】\n\nこの端末に保存された勤務記録、名前、代休・祝代休の登録日、派遣場所などをすべて削除します。\nこの操作は取り消せません。先に「バックアップ保存」を行うことをおすすめします。\n\n本当にリセットしますか？';
   if(!confirm(message))return;
   if(!confirm('最終確認：保存データをすべて削除します。実行してよろしいですか？'))return;
-  Object.values(STORAGE_KEYS).forEach(key=>localStorage.removeItem(key));
+  Object.values(STORAGE_KEYS).forEach(key=>localStorage.removeItem(key));localStorage.removeItem(PREFERRED_NAME_STORAGE);
   alert('この端末の勤務管理データをリセットしました。');
   location.reload();
 });
@@ -908,10 +964,11 @@ $('importFile').addEventListener('change',async e=>{
    records[date]={people:existingPeople};
   });
 
-  if(Array.isArray(data.names))savedNames=[...savedNames]; data.names.filter(n=>typeof n==='string'&&n.trim()).forEach(n=>{if(!savedNames.some(existing=>normalizePersonName(existing)===normalizePersonName(n)))savedNames.push(n)});
-  preview.forEach(item=>{if(!savedNames.includes(item.name))savedNames.push(item.name)});
-  savedNames.sort((a,b)=>a.localeCompare(b,'ja'));
-  try{localStorage.setItem(NAME_STORAGE,JSON.stringify(savedNames))}catch(err){}
+  // 既存の使用者を先頭に維持し、バックアップの名前をスペース差を無視して追加
+  const currentPreferred=preferredName||savedNames[0]||'';
+  const importedNames=[...(Array.isArray(data.names)?data.names:[]),...preview.map(item=>item.name)];
+  savedNames=dedupeNames([currentPreferred,...savedNames,...importedNames]);
+  savedNames=dedupeNames([preferredName,...savedNames]);try{localStorage.setItem(NAME_STORAGE,JSON.stringify(savedNames))}catch(err){}
   if(Array.isArray(data.dispatchPlaces)){savedDispatchPlaces=[...new Set([...savedDispatchPlaces,...data.dispatchPlaces.filter(v=>typeof v==='string'&&v.trim())])].sort((a,b)=>a.localeCompare(b,'ja'));writeDispatchPlaces()}
   if(data.holidayDates&&typeof data.holidayDates==='object')Object.entries(data.holidayDates).forEach(([name,groups])=>{if(!groups||typeof groups!=='object')return;holidayDates[name]=holidayDates[name]||{compensatory:[],holiday:[]};['compensatory','holiday'].forEach(key=>{if(Array.isArray(groups[key]))holidayDates[name][key]=[...new Set([...(holidayDates[name][key]||[]),...groups[key].filter(v=>typeof v==='string')])].sort()})});
   if(data.autoHolidayDates&&typeof data.autoHolidayDates==='object')Object.entries(data.autoHolidayDates).forEach(([name,groups])=>{if(!groups||typeof groups!=='object')return;autoHolidayDates[name]=autoHolidayDates[name]||{compensatory:[],holiday:[]};['compensatory','holiday'].forEach(key=>{if(Array.isArray(groups[key]))autoHolidayDates[name][key]=[...new Set([...(autoHolidayDates[name][key]||[]),...groups[key].filter(v=>typeof v==='string')])].sort()})});
@@ -1086,21 +1143,23 @@ function renderNameRoster(){
 $('registerName').addEventListener('click',()=>{
  const input=$('newName');const name=input.value.trim();
  if(!name){alert('名前を入力してください。');input.focus();return;}
- if(savedNames.length===1&&normalizePersonName(savedNames[0])===normalizePersonName(name)){alert('この名前は設定済みです。');return;}
- if(savedNames.length&&savedNames[0]!==name&&!confirm(`名前を「${name}」に変更しますか？\\n過去の勤務記録に入っている名前は自動変更されません。`))return;
- savedNames=[name];
+ if(dirty&&!confirm('未保存の変更があります。保存せずに職員を切り替えますか？'))return;
+ savedNames=dedupeNames([name,...savedNames]);
+ preferredName=savedNames.find(n=>normalizePersonName(n)===normalizePersonName(name))||name;
+ try{localStorage.setItem(PREFERRED_NAME_STORAGE,preferredName)}catch(e){}
  if(!writeNames())return;
  input.value='';
- if(people.length===0){people=[blankPerson(1)];people[0].name=name;dirty=true;}
- else {people=people.slice(0,1);people[0].name=name;dirty=true;}
- page=0;render();$('status').textContent='名前を設定しました。勤務記録を保存してください。';renderPersonalHolidayDashboard();
+ // 既存の勤務内容の名前だけを変更せず、選択した職員の記録を再読込する。
+ loadDay(currentDate);
+ $('status').textContent='選択中の職員：'+preferredName;
+ renderPersonalHolidayDashboard();
 });
 $('newName').addEventListener('keydown',e=>{if(e.key==='Enter')$('registerName').click()});
 // 起動時は「新規作成」ボタンを押した直後と同じ、空の入力画面から始める。保存済みデータは変更しない。
 currentDate=localDate();
-people=savedNames.length?[{...blankPerson(1),name:savedNames[0]}]:[];
-page=0;dirty=false;$('recordDate').value=currentDate;render();
-$('status').textContent='新規入力画面（未保存）';
+page=0;dirty=false;$('recordDate').value=currentDate;
+if(savedNames.length)loadDay(currentDate);else{people=[];render();}
+$('status').textContent=records[currentDate]?'保存済みデータを表示':'新しい日付（未保存）';
 renderNameRoster();
 renderPersonalHolidayDashboard();
 })();
